@@ -1,0 +1,566 @@
+<!doctype html>
+<html lang="en">
+
+    <head>
+        <meta charset="utf-8">
+        <title>Reinventing the Wheel</title>
+
+        <meta name="apple-mobile-web-app-capable" content="yes">
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+		<meta name="viewport" content="width=device-width, initial-scale=1.0">
+		
+		<link rel="stylesheet" href="reveal.js/css/reset.css">
+        <link rel="stylesheet" href="reveal.js/css/reveal.css">
+        <link rel="stylesheet" href="reveal.js/css/theme/black.css" id="theme">
+
+        <!-- Theme used for syntax highlighting of code -->
+<!--        <link rel="stylesheet" href="reveal.js/lib/css/monokai.css"> -->
+        <link rel="stylesheet" href="reveal.js/lib/css/sunburst.css">
+
+		<!-- Printing and PDF exports -->
+        <script>
+          var link = document.createElement( 'link' );
+          link.rel = 'stylesheet';
+          link.type = 'text/css';
+          link.href = window.location.search.match( /print-pdf/gi ) ? 'css/print/pdf.css' : 'css/print/paper.css';
+          document.getElementsByTagName( 'head' )[0].appendChild( link );
+        </script>
+
+        <!--[if lt IE 9]>
+        <script src="lib/js/html5shiv.js"></script>
+        <![endif]-->
+    </head>
+
+    <body>
+
+        <div class="reveal">
+          <!-- Any section element inside of this container is displayed as a slide -->
+            <div class="slides">
+                <section data-markdown>
+				  <script type="text/template">
+Reinventing the Wheel
+
+https://github.com/dnstandish/TPM_Reinventing_the_Wheel
+				  </script>
+                </section>
+
+                
+                <section data-markdown>
+				  <script type="text/template">
+### Situation
+
+- Can’t mount USB devices<!-- .element: class="fragment"-->
+- Can’t connect to devices on the local network<!-- .element: class="fragment"-->
+- Can’t share via bluetooth<!-- .element: class="fragment"-->
+- Can’t burn media<!-- .element: class="fragment"-->
+				  </script>
+                </section>
+                <section data-markdown>
+				  <script type="text/template">
+But it’s difficult to lock something down completely
+
+There are often side channels
+
+
+ - images on the display can be photographed<!-- .element: class="fragment"-->
+ - information can be encoded via timing/volume of network traffic<!-- .element: class="fragment"-->
+ - a signal can be encoded as audio<!-- .element: class="fragment"-->
+				  </script>
+                </section>
+                <section data-markdown>
+				  <script type="text/template">
+Audio seemed easiest
+
+ -  built in OS support<!-- .element: class="fragment"-->
+ -  can use existing utilities to capture<!-- .element: class="fragment"-->
+ -  don’t need to develop timing logic<!-- .element: class="fragment"-->
+ -  don’t need to develop image processing<!-- .element: class="fragment"-->
+				  </script>
+                </section>
+                <section data-markdown>
+				  <script type="text/template">
+## Chosen approach
+
+ -   encode data into a WAV file
+ -   play the file via standard media player
+ -   transmit to another computer via audio cable
+ -   record the audio signal into a WAV file
+ -   decode the data from the recording
+
+				  </script>
+                </section>
+
+                <section data-markdown>
+				  <script type="text/template">
+## Proof of concept
+
+ -  8 bit 8kHz sound file
+    -   don’t need to worry about numeric overflow
+    -   small file size
+    -   don’t need high fidelity hardware
+ -  simple pulse encoding
+ -  lots of space between pulses
+ -  pulse derived from sine wave
+
+				  </script>
+                </section>
+
+                <section data-markdown STYLE="font-size: 50%;">
+				  <script type="text/template">
+## WAVE File Format
+
+- 4	“RIFF”
+- 4  ***length*** length of following content unsigned 32 bit little endian
+  - 4  ”WAVE”
+  - 4  ”fmt “ format chunk
+  - 4  ***length*** length of following format chunk data U32LE
+    - 2 ***wFormat***	WAVE_FORMAT_PCM = 1
+    - 2 ***nChannels*** unsigned 16 bit little endian (U16LE)
+    - 4 ***nSamplesPerSec*** U32LE
+    - 4 ***nAvgBytesPerSec*** U32LE
+    - 2 ***nBlockAlign*** bytes for single sample U16LE
+    - 2 ***bitsPerSample*** U16LE
+    - (2) ***cbSize*** size of extra format info U16LE (must be 0 for WAVE_FMT_PCM. optional defaulting to 0)
+  - 4 ”data” data chunk
+  - 4 ***length*** length of following data U32LE
+    - ***data*** 8bit data is unsigned zero is 128; 16bit data is signed little endian zero is 0
+				  </script>
+                </section>
+
+                <section>
+<pre><code class="hljs" data-trim STYLE="font-size: 70%; line-height: 120%;">
+ sub wave_head {
+     my $fd = shift;
+     my $bytes_per_pulse = shift;
+     my $nbytes = shift;
+     print $fd
+         'RIFF',
+         pack('V', $bytes_per_pulse * $nbytes * 8 + 36 ),
+             "WAVE",
+                 "fmt ",
+                 pack('V', 16 ), # there are 16 bytes in format chunk
+                     pack('v', 1 ), # WAVE_FORMAT_PCM
+                     pack('v', 1 ), # 1 channel
+                     pack('V', 8000 ), # samples per second
+                     pack('V', 8000 ), # avg bytes per second
+                     pack('v', 1 ), # 1 channel 8bit is 1 byte for block of sample
+                     pack('v', 8 ), # 8bit
+                 "data",
+                 pack('V', $bytes_per_pulse * $nbytes * 8 );
+ }
+ </code></pre>
+                </section>
+               
+                <section data-markdown>
+<!-- gs -dSAFER -dBATCH -dNOPAUSE -sDEVICE=png16m -dGraphicsAlphaBits=4 \
+ -dEPSCrop -r100 -sOutputFile=ideal_pulse.png ../ideal_pulse.eps
+-->
+
+				  <script type="text/template">
+71 * sin(2 * 1000 * pi * x/8000) * (0.5 ** (((10-x)/2)**2)) + 128
+
+![](ideal_pulse.png)
+
+				  </script>
+                </section>
+               
+                <section data-markdown>
+				  <script type="text/template">
+Pulse Data 8bit 8kHz
+```perl
+sub func
+{
+    my $i = shift;
+    return 128 if $i > 20;
+    my $x = sin( 2 * 1000 * pi * $i / 8000 ) * 71;
+    my $f = 0.5 ** ( ( (10.0 - $i) / 8.0 ) ** 2 );
+    return int($x * $f) + 128;
+}
+my $N_SAMPLE = 80;
+my @a = map { func($_) } 0..($N_SAMPLE-1);
+my $bytes = pack('C*', @a); # bytes for bit=1
+my $ebytes = pack('C*', (128) x $N_SAMPLE); # bytes for bit=0
+```
+				  </script>
+                </section>
+               
+                <section data-markdown>
+				  <script type="text/template">
+Encoded Pulse
+
+![](encoded_pulse.png)
+				  </script>
+                </section>
+               
+                <section data-markdown  STYLE="font-size: 50%;">
+				  <script type="text/template">
+Generous Pulse Separation
+
+20 byte pulse separated by 60 bytes silence
+
+![](encoded_pulse_sep.png)
+				  </script>
+                </section>
+
+                <section data-markdown  STYLE="font-size: 50%;">
+				  <script type="text/template">
+Pulse as Recorded
+
+in this example the recorded pulse is inverted               
+
+![](actual_8bit.png)
+				  </script>
+                </section>
+               
+                <section data-markdown>
+				  <script type="text/template">
+Envelope of data within recording
+
+ -  Start of signal indicated by marker 0xff
+ -  followed by length of encoded data unsigned 32 bit little endian
+ -  data bits 1 = pulse; 0 = zeroes
+ -  end padding 0x00 4 times
+
+				  </script>
+                </section>
+               
+                <section data-markdown STYLE="font-size: 70%; line-height: 120%;">
+				  <script type="text/template">
+Encoding
+```perl
+    sub encode_bytes {
+        my $fd = shift;
+        my $pulse1 = shift;
+        my $pulse0 = shift;
+        my $data = shift;
+        for my $c ( split '', $data ) # not best memory use
+        {
+            print $fd map { $_ ? $pulse1 : $pulse0 } split '', unpack('B8', $c);
+        }
+    }
+    open my $fd_out, '>:raw', $out;
+    wave_head( $fd_out, $pulse_len, 4 + 1 + $file_len + $n_zero_pad );
+    for my $s ( "\x{ff}", pack('V', $file_len ), $content, "\x00" x $n_zero_pad ) {
+        encode_bytes( $fd_out, $bytes, $ebytes, $s);
+    }
+    close( $fd_out );
+```
+				  </script>
+                </section>
+
+               
+                <section data-markdown>
+				  <script type="text/template">
+Decode
+
+ -  verify WAV header for 8kHz 8bit
+ -  find start marker
+ -  decode length
+ -  decode data
+               
+				  </script>
+                </section>
+                <section data-markdown>
+				  <script type="text/template">
+## How to detect pulse?
+
+### Possibilities
+
+ -   look at 1kHz component of Fourier series?
+ -   convolute bytes with original pulse?
+ -   sum of absolute magnitude of bytes?
+ -   once starting marker found data should be a fixed series of 80 byte chunks
+				  </script>
+                </section>
+               
+                <section data-markdown  STYLE="font-size: 60%;">
+				  <script type="text/template">
+### Finding signal start
+
+ -   convert unsigned data bytes to signed int relative to 128
+ -   examine 20 byte running sum of absolute value of bytes
+ -   look for running sum over a threshold sustained for at least 20 bytes, followed by decrease below threshold
+ -   ignore bytes below arbitrary noise floor
+ -   find index of maximum running sum starting 40 bytes before drop below threshhold
+ -   the maximum running sum will be used as threshold for rest of file
+ -   interpret 20 byte chunks for 32 chunks
+ -   1 if 20 byte running sum > 70% max running sum
+ -   0 if 20 byte running sum < 40% max running sum
+ -   if signal start should see 10001000100010001000100010001000
+ -   (i.e. 0xFF)
+ -   if doesn’t match continue looking
+				  </script>
+                </section>
+               
+                <section data-markdown>
+				  <script type="text/template">
+### Decode data
+
+ -   decode one bit at a time
+ -   threshold is miximum running sum from signal start
+ -   first 20 bytes > 70% threshold is a 1
+ -   first 20 bytes < 40% threshold is a 0
+ -   verify next three 20 byte chunks are under 40% threshold
+ -   give up if a 20 byte chunk is between 40% and 70%
+ -   combine 8 bits into a byte
+ -   continue until end of specified data length
+				  </script>
+                </section>
+               
+                <section data-markdown>
+				  <script type="text/template">
+### Does it work?
+
+ -  Yes
+ -  If the encoded file is small<!-- .element: class="fragment"-->
+ -  For larger file the signal slowly shifts earlier in file<!-- .element: class="fragment"-->
+ -  Effect looks too regular to be dropped bytes<!-- .element: class="fragment"-->
+ -  Artifact of audio play/record not supporting 8 kHz at hardware level?<!-- .element: class="fragment"-->
+				  </script>
+                </section>
+               
+                <section data-markdown>
+				  <script type="text/template">
+### Add periodic resynchronization
+
+ -  after 20 bytes decoded data (1.6 sec of audio)
+ -  on next 1 bit find position of max running sum in range [-30,+40]
+ -  if position differs more than 2 samples adjust signal offset
+ -  For a 3MB audio file the total correction is around -127
+				  </script>
+                </section>
+               
+                <section data-markdown>
+				  <script type="text/template">
+## Live Demonstration?
+
+Not yet<!-- .element: class="fragment"-->
+				  </script>
+                </section>
+                <section data-markdown>
+				  <script type="text/template">
+Thoughts
+
+ -   current transfer rate 100 bits/s<!-- .element: class="fragment"-->
+ -   could double by adding 2nd channel<!-- .element: class="fragment"-->
+ -   might be able to scale pulse to pack in more than one bit<!-- .element: class="fragment"-->
+ -   could reduce width of pulse and padding<!-- .element: class="fragment"-->
+ -   could increase frequency for pulse and sampling<!-- .element: class="fragment"-->
+ -   code needs refactoring<!-- .element: class="fragment"-->
+ -   error detection via gzip of file before encoding<!-- .element: class="fragment"-->
+               
+				  </script>
+                </section>
+               
+                <section data-markdown>
+				  <script type="text/template">
+Thoughts (cont'd)
+
+ - can we eliminate audio cable<!-- .element: class="fragment"-->
+ - use sign of signal to encode more information<!-- .element: class="fragment"-->
+ - try different pulse shapes<!-- .element: class="fragment"-->
+ - shift pulse  to encode more information<!-- .element: class="fragment"-->
+ - can we measue frequency mismatch and auto correct?<!-- .element: class="fragment"-->
+ - if 2nd channel added could pack more information via pulse offset
+ between channels<!-- .element: class="fragment"-->
+
+				  </script>
+                </section>
+               
+                <section data-markdown>
+				  <script type="text/template">
+Variation in signal sum
+
+![](thresh_hold_stats_strong.png)
+				  </script>
+                </section>
+               
+                <section data-markdown>
+				  <script type="text/template">
+Variation of signal sum - histogram
+
+![](thresh_hold_hist_strong.png)
+				  </script>
+                </section>
+               
+                <section data-markdown>
+				  <script type="text/template">
+Lower volume signal
+
+![](thresh_hold_stats_weak.png)
+				  </script>
+                </section>
+               
+                <section data-markdown>
+				  <script type="text/template">
+Lower volume - histogram
+
+![](thresh_hold_hist_weak.png)
+				  </script>
+                </section>
+               
+                <section data-markdown>
+				  <script type="text/template">
+Loosened resync
+
+![](thresh_hold_stats_loosened_correction.png)
+				  </script>
+                </section>
+               
+                <section data-markdown>
+				  <script type="text/template">
+Loosened resync - histogram
+
+![](thresh_hold_hist_loosend_correction.png)
+				  </script>
+                </section>
+               
+                <section data-markdown>
+				  <script type="text/template">
+ - Reinvented soft modem
+ - but without 2 way communication<!-- .element: class="fragment"-->
+ - and much poorer use of available bandwidth.<!-- .element: class="fragment"-->
+				  </script>
+                </section>
+                <section data-markdown STYLE="font-size: 70%;">
+				  <script type="text/template">
+## Live Demonstration
+```text
+TPM_Reinventing_the_Wheel/samples$ cat sample.txt
+He Thought he saw a Coach-and-Four
+That stood beside his bed
+He looked again, and found it was
+A bear without a head
+'Poor thing,'  he said, 'poor silly thing!
+It's waiting to be fed!"
+
+Lewis Carroll
+
+TPM_Reinventing_the_Wheel/samples$ ../encode_file.pl  -in sample.txt -out sample.WAV
+
+TPM_Reinventing_the_Wheel/samples$ ls -l
+total 140
+-rw-rw-r-- 1 davidst davidst    200 Feb 25 21:49 sample.txt
+-rw-rw-r-- 1 davidst davidst 133804 Feb 25 21:49 sample.WAV
+```
+				  </script>
+                </section>
+                <section data-markdown STYLE="font-size: 60%;">
+				  <script type="text/template">
+```text
+TPM_Reinventing_the_Wheel/samples$ aplay sample.WAV
+Playing WAVE 'sample.WAV' : Unsigned 8 bit, Rate 8000 Hz, Mono
+
+TPM_Reinventing_the_Wheel/temp$ arecord  -r 8000 -c 1 -f U8 TPM_Reinventing_the_Wheel/temp$ arecord  -r 8000 -c 1 -f U8 test.WAV 
+Recording WAVE 'test.WAV' : Unsigned 8 bit, Rate 8000 Hz, Mono
+^CAborted by signal Interrupt...
+
+TPM_Reinventing_the_Wheel/temp$ ../decode_file.pl -in test.WAV  -out delme.out
+riff RIFF
+rlen 206036
+wav WAVE
+ .
+ .
+ .
+YES ****
+1587853585
+message length 200
+1587853585
+total correction 0
+```
+				  </script>
+                </section>
+
+                <section data-markdown STYLE="font-size: 100%;">
+				  <script type="text/template">
+```text
+TPM_Reinventing_the_Wheel/temp$ cat test.out
+He Thought he saw a Coach-and-Four
+That stood beside his bed
+He looked again, and found it was
+A bear without a head
+'Poor thing,'  he said, 'poor silly thing!
+It's waiting to be fed!"
+```
+				  </script>
+                </section>               
+                <section data-markdown STYLE="font-size: 50%;">
+				  <script type="text/template">
+## References
+
+RIFF and WAV format
+
+ - (http://www-mmsp.ece.mcgill.ca/Documents/AudioFormats/WAVE/WAVE.html)
+ - (https://docs.microsoft.com/en-us/previous-versions/dd757713(v%3dvs.85)?redirectedfrom=MSDN)
+ - (https://github.com/HertzDevil/raw2wav)
+ - (https://wiki.multimedia.cx/index.php/WAVEFORMATEX)
+ - (https://wiki.multimedia.cx/index.php/Microsoft_Wave)
+ - (https://wiki.multimedia.cx/index.php/RIFF)
+				  </script>
+                </section>
+               
+                <section data-markdown>
+				  <script type="text/template">
+# Extras
+				  </script>
+                </section>
+               
+                <section data-markdown>
+				  <script type="text/template">
+ - bump rate to 44100 Hz via WAVE header
+ - leave pulse as 20 samples, gap 60 samples
+ - recoard at 44100 Hz
+				  </script>
+                </section>
+               
+                <section data-markdown>
+				  <script type="text/template">
+				  </script>
+                </section>
+               
+                <section data-markdown>
+				  <script type="text/template">
+				  </script>
+                </section>
+               
+                <section data-markdown>
+				  <script type="text/template">
+				  </script>
+                </section>
+               
+
+
+            </div>
+        </div>
+
+        <script src="reveal.js/js/reveal.js"></script>
+
+        <script>
+
+            // More info https://github.com/hakimel/reveal.js#configuration
+            Reveal.initialize({
+                controls: true,
+                progress: true,
+                center: true,
+            hash: true,
+			width: "100%",
+			height: "100%",
+			margin: 0,
+
+                transition: 'slide', // none/fade/slide/convex/concave/zoom
+
+                // More info https://github.com/hakimel/reveal.js#dependencies
+                dependencies: [
+                    { src: 'reveal.js/plugin/markdown/marked.js', condition: function() { return !!document.querySelector( '[data-markdown]' ); } },
+                    { src: 'reveal.js/plugin/markdown/markdown.js', condition: function() { return !!document.querySelector( '[data-markdown]' ); } },
+                    { src: 'reveal.js/plugin/highlight/highlight.js' },
+                    { src: 'reveal.js/plugin/search/search.js', async: true },
+                    { src: 'reveal.js/plugin/zoom-js/zoom.js', async: true },
+                    { src: 'reveal.js/plugin/notes/notes.js', async: true }
+                ]
+            });
+
+        </script>
+
+    </body>
+</html>
