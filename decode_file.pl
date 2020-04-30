@@ -8,10 +8,14 @@ use Carp;
 use strict;
 use warnings;
 
+my @FREQ = (8000, 11025, 22050, 44100);
+my %FREQ_SET = map { ($_,1) } @FREQ;
+
 my $help;
 my $in;
 my $out;
-if (!GetOptions('help', \$help, 'in=s', \$in, 'out=s', \$out) || $help || !defined($in) ) {
+my $freq=8000;
+if (!GetOptions('help', \$help, 'freq=i', \$freq, 'in=s', \$in, 'out=s', \$out) || $help || !defined($in) ) {
     print "usage $0: [--help] -in input_wav_file -out output_file\n";
     exit 9;
 }
@@ -86,7 +90,7 @@ sub adjust_sync {
             $i_max_run_sum = $i;
         }
     }
-    my $correction = $i_max_run_sum - 20;
+    my $correction = $i_max_run_sum - 19;
     if ( abs($correction) > 2 ) {
         say "at $i_start correction $correction";
         $sig_hr->{correction} += $correction;
@@ -297,8 +301,8 @@ check_eq( 'fmt ', $fmt );
 check_num_eq( 16, $fmt_len, "fmt length" );
 check_num_eq( 1, $type, 'WAVE_FMT_PCM' );
 check_num_eq( 1, $nchannels, 'channels');
-check_num_eq( 8000, $samp_per_sec, 'samples per second');
-check_num_eq( 8000, $avg_bytes_per_sec, 'avg bytes per second');
+check_num_eq( $freq, $samp_per_sec, 'samples per second');
+check_num_eq( $freq, $avg_bytes_per_sec, 'avg bytes per second');
 check_num_eq( 1, $bytes_per_samp, 'avg bytes per second');
 check_num_eq( 8, $nbits, 'bits');
 check_eq( 'data', $data );
