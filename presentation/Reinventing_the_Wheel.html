@@ -214,12 +214,12 @@ in this example the recorded pulse is inverted
                
                 <section data-markdown>
 				  <script type="text/template">
-Envelope of data within recording
+Data Envelope
 
  -  Start of signal indicated by marker 0xff
  -  followed by length of encoded data unsigned 32 bit little endian
  -  data bits 1 = pulse; 0 = zeroes
- -  end padding 0x00 4 times
+ -  end padding 0x00 4 times (later increased to 40)
 
 				  </script>
                 </section>
@@ -297,7 +297,7 @@ Decode
 ### Decode data
 
  -   decode one bit at a time
- -   threshold is miximum running sum from signal start
+ -   threshold is maximum running sum from signal start
  -   first 20 bytes > 70% threshold is a 1
  -   first 20 bytes < 40% threshold is a 0
  -   verify next three 20 byte chunks are under 40% threshold
@@ -509,22 +509,61 @@ RIFF and WAV format
 				  <script type="text/template">
  - bump rate to 44100 Hz via WAVE header
  - leave pulse as 20 samples, gap 60 samples
- - recoard at 44100 Hz
+ - record at 44100 Hz
 				  </script>
                 </section>
                
                 <section data-markdown>
 				  <script type="text/template">
+ - 44100 Hz successful
+ - play/record on same machine has no signal drift
+ - recording on different machine shows drift indicative of clock difference
+				  </script>
+                </section>
+
+                <section data-markdown STYLE="font-size: 70%; line-height: 120%;">
+				  <script type="text/template">
+## Pluse magnitude via Fourier series
+```perl
+# coefficients for fourier series
+my @fsin = 	map {  sin( 2 * pi * ($_) / 8.0 ) } (0..19);
+my @fcos = 	map {  cos( 2 * pi * ($_) / 8.0 ) } (0..19);
+
+sub fourier {
+    my $ar = shift;
+    die "expected 20 bytes" unless @$ar == 20;
+    my $ssum = 0.0;
+    my $csum = 0.0;
+    for my $i ( 0 .. 19 ) {
+        $ssum += $ar->[$i] * $fsin[$i];
+        $csum += $ar->[$i] * $fcos[$i];
+    }
+    my $r = sqrt( $csum**2 + $ssum**2 );
+    my $shift_deg;
+    $shift_deg = 360 * atan2( $ssum , $csum ) / ( 2 * pi );
+    $shift_deg += 360 if $shift_deg < 0;
+
+    return { ssum => $ssum, csum => $csum, r => $r, shift_deg => $shift_deg };
+}
+					
+```					
+				  </script>
+                </section>
+
+                <section data-markdown>
+				  <script type="text/template">
+Variation in signal sum / Fourier magnitude
+
+![](thresh_hold_stats_44100.png)
 				  </script>
                 </section>
                
-                <section data-markdown>
-				  <script type="text/template">
-				  </script>
-                </section>
                
                 <section data-markdown>
 				  <script type="text/template">
+Variation in signal sum / Fourier magnitude Histogram
+
+![](thresh_hold_hist_44100.png)
 				  </script>
                 </section>
                
